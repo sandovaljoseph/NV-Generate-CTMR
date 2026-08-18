@@ -54,6 +54,7 @@ from monai.transforms import SaveImage
 from monai.utils import set_determinism
 
 from .augmentation import remove_tumors
+from .body_crop import crop_img_body_mask, fill_body_envelope_holes
 from .utils import binarize_labels
 from .utils_infer import (
     build_conditioning_tensors,
@@ -116,6 +117,7 @@ def ldm_conditional_sample_one_image_from_mask(
             "output_size is not a desired value. Need to interpolate the mask to match with output_size. The result image will be very low quality."
         )
         combine_label = torch.nn.functional.interpolate(combine_label, size=output_size, mode="nearest")
+    combine_label = fill_body_envelope_holes(combine_label)
 
     # ── Mask-specific pre-processing ───────────────────────────────────────────
     # NOTE (modality-specific): the next line converts mask → ControlNet
@@ -166,21 +168,6 @@ def ldm_conditional_sample_one_image_from_mask(
 # Backward-compat alias — existing callers (LDMSampler, infer_image_from_mask_batch,
 # notebooks) import the old name. Keep it pointing at the mask wrapper.
 ldm_conditional_sample_one_image = ldm_conditional_sample_one_image_from_mask
-
-
-def crop_img_body_mask(synthetic_images, combine_label, a_min=-1000):
-    """
-    Crop the synthetic image using a body mask.
-
-    Args:
-        synthetic_images (torch.Tensor): The synthetic images.
-        combine_label (torch.Tensor): The body mask.
-
-    Returns:
-        torch.Tensor: The cropped synthetic images.
-    """
-    synthetic_images[combine_label == 0] = a_min
-    return synthetic_images
 
 
 # =============================================================================
