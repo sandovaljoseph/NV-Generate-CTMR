@@ -103,8 +103,7 @@ def ldm_conditional_sample_one_image_from_mask(
     Returns ``(synthetic_image, combine_label)`` — the mask is returned for
     downstream filtering (e.g. ``filter_mask_with_organs``).
     """
-    # modality_tensor can be scalar (single mask) or shape (B,) (batch infer);
-    # collapse to a single int so `if` doesn't choke on a multi-element bool tensor.
+    # Collapse modality_tensor to one int so `if` sees a scalar value.
     if modality_tensor is not None and int(modality_tensor.flatten()[0]) <= 7:
         a_min = -1000  # CT background floor
     else:
@@ -117,10 +116,8 @@ def ldm_conditional_sample_one_image_from_mask(
         )
         combine_label = torch.nn.functional.interpolate(combine_label, size=output_size, mode="nearest")
 
-    # ── Mask-specific pre-processing ───────────────────────────────────────────
-    # NOTE (modality-specific): the next line converts mask → ControlNet
-    # conditioning. A future image-conditioned ControlNet would replace this
-    # with image normalization in its own wrapper module.
+    # Convert the mask to the ControlNet conditioning tensor.
+    # Other conditioning modes should preprocess in their own wrapper.
     controlnet_cond_tensor = binarize_labels(combine_label.as_tensor().long()).half()
 
     controlnet_uncond_tensor = None
@@ -134,7 +131,6 @@ def ldm_conditional_sample_one_image_from_mask(
         controlnet_uncond_tensor = binarize_labels(combine_label_no_tumor.as_tensor().long()).half()
         del combine_label_no_tumor
 
-    # ── Modality-agnostic core ─────────────────────────────────────────────────
     synthetic_images = run_controlnet_conditioned_image_dm(
         autoencoder=autoencoder,
         diffusion_unet=diffusion_unet,
@@ -157,14 +153,12 @@ def ldm_conditional_sample_one_image_from_mask(
         controlnet_uncond_tensor=controlnet_uncond_tensor,
     )
 
-    # ── Mask-specific post-processing ──────────────────────────────────────────
-    # Regularize background HU using the mask: voxels where mask==0 → a_min.
+    # Force background voxels to the modality floor.
     synthetic_images = crop_img_body_mask(synthetic_images, combine_label, a_min=a_min)
     return synthetic_images, combine_label
 
 
-# Backward-compat alias — existing callers (LDMSampler, infer_image_from_mask_batch,
-# notebooks) import the old name. Keep it pointing at the mask wrapper.
+# Keep the old public name for existing callers.
 ldm_conditional_sample_one_image = ldm_conditional_sample_one_image_from_mask
 
 
@@ -183,20 +177,8 @@ def crop_img_body_mask(synthetic_images, combine_label, a_min=-1000):
     return synthetic_images
 
 
-# =============================================================================
-# CLI entry point
-# =============================================================================
-#
-# Generates a CT/MR image from a user-provided mask file. Loads the necessary
-# checkpoints, validates + (optionally) resamples the mask, runs inference, and
-# saves the output.
-#
-# Usage:
-#   python -m scripts.infer_image_from_mask --mask /path/to/mask.nii.gz \
-#       -t ./configs/config_network_rflow.json \
-#       -e ./configs/environment_rflow-ct.json \
-#       --modality 1 --output-dir ./output_user_mask
-# =============================================================================
+# CLI entry point for image-from-mask inference.
+# Example: python -m scripts.infer_image_from_mask --mask /path/to/mask.nii.gz ...
 
 
 # Valid (dim, spacing) constraints — mirror check_input_ct in scripts.sample_mask.

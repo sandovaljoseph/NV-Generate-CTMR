@@ -44,7 +44,7 @@ def fetch_to_hf_path_cmd(
         dst = Path(it["path"])
         dst.parent.mkdir(parents=True, exist_ok=True)
 
-        # Hit config.json once per repo before downloading weights/data.
+        # Touch config.json once per repo so Hugging Face records the download.
         if track_download and repo_id not in tracked_repos:
             try:
                 ensure_hf_download_tracked(
@@ -77,7 +77,7 @@ def fetch_to_hf_path_cmd(
 
 
 def download_model_data(generate_version, root_dir, model_only=False):
-    # TODO: remove the `files` after the files are uploaded to the NGC
+    # TODO: drop this list after the files move to NGC.
     if generate_version == "rflow-mr-brain":
         files = [
             {

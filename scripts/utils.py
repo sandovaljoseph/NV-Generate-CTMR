@@ -538,30 +538,24 @@ def add_body_envelope(
     # 6. Force labeled voxels to be inside body.
     body_t[seg_t] = 1.0
 
-    # 7. Fill: every voxel inside the silhouette that's not already labeled
-    #    becomes body_label.
+    # 7. Fill unlabeled voxels inside the silhouette with body_label.
     body_np = body_t.detach().cpu().numpy() > 0.5
     out = seg_np.copy()
     out[body_np & (out == 0)] = body_label
 
-    # 8. Table detection. The find-air-invert steps above can still leak the air-density CT table into the body —
-    #    the air trapped between patient and table is a SEPARATE component from the exterior air, so it reads as
-    #    "not air" -> body. Detect it as connected components of body voxels that are actually AIR
-    #    (``air_hu = CT < hu_threshold``); since the seg labels the lungs, no legitimate air region is table-sized,
-    #    so EVERY air-in-body component >= ``table_frac_thresh`` of the body is table. There can be MORE THAN ONE
-    #    (a split table, separate side rails, or a table broken by the patient silhouette), so remove ALL of them.
-    if seg_has_lung:  # only safe when lungs are labeled (lung air would otherwise look like the table)
-        air_hu = ct_np < hu_threshold  # air / low-density mask (same HU cut as the air step)
-        air_body = (out == body_label) & air_hu  # body voxels that are actually air
+    # 8. Remove any large air-density component that leaked into the body as table.
+    if seg_has_lung:  # Requires lung labels so lung air is not mistaken for table.
+        air_hu = ct_np < hu_threshold  # Same HU cut as the air-mask step.
+        air_body = (out == body_label) & air_hu  # Body voxels that still read as air.
         n_body = int((out == body_label).sum())
         if air_body.any() and n_body:
-            lbl, ncc = ndimage.label(air_body)  # all air-in-body components
+            lbl, ncc = ndimage.label(air_body)
             if ncc:
                 sizes = np.bincount(lbl.ravel())
-                sizes[0] = 0  # drop background
-                table_ids = np.nonzero(sizes >= table_frac_thresh * n_body)[0]  # every table-sized component
+                sizes[0] = 0
+                table_ids = np.nonzero(sizes >= table_frac_thresh * n_body)[0]
                 if table_ids.size:
-                    out[np.isin(lbl, table_ids)] = 0  # remove them all from the body
+                    out[np.isin(lbl, table_ids)] = 0
                     fracs = [round(float(100.0 * sizes[i] / n_body), 1) for i in table_ids]
                     print(f"[add_body_envelope] table detected ({table_ids.size} component(s): {fracs}% of body) -> removed", flush=True)
     return out.astype(orig_dtype)

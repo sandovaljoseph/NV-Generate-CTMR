@@ -303,9 +303,7 @@ def run_controlnet_conditioned_image_dm(
             device=torch.device("cpu"),
         )
         synthetic_images = dynamic_infer(inferer, recon_model, latents)
-        # modality_tensor can be scalar (single mask) or shape (B,) (batch infer).
-        # Use the first element so a >1-batch boolean tensor doesn't blow up in `if`.
-        # All batch items share the same modality in our call sites.
+        # Use one scalar modality value because all batch items share it here.
         if modality_tensor is not None and int(modality_tensor.flatten()[0]) <= 7:
             synthetic_images = torch.clip(synthetic_images, b_min, b_max).cpu()
         else:

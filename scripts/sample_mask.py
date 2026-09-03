@@ -36,11 +36,7 @@ from .utils import (
     remap_labels,
 )
 
-# ReconModel + initialize_noise_latents are shared with the image-from-mask
-# pipeline (and any future conditioning-modality wrapper), so they live in
-# utils_infer. Re-export them from this module's namespace for backward
-# compatibility with callers that imported them from scripts.sample_mask
-# (or via the scripts.sample shim).
+# Re-export shared helpers here so older imports keep working.
 from .utils_infer import ReconModel, initialize_noise_latents  # noqa: F401
 
 
@@ -79,10 +75,8 @@ def ldm_conditional_sample_one_mask(
     recon_model = ReconModel(autoencoder=autoencoder, scale_factor=scale_factor).to(device)
 
     with torch.no_grad(), torch.amp.autocast("cuda"):
-        # Generate random noise
         latents = initialize_noise_latents(latent_shape, device)
         anatomy_size = torch.FloatTensor(anatomy_size).unsqueeze(0).unsqueeze(0).half().to(device)
-        # synthesize latents
         if isinstance(noise_scheduler, DDPMScheduler) and num_inference_steps < noise_scheduler.num_train_timesteps:
             warnings.warn(
                 "**************************************************************\n"
@@ -95,7 +89,6 @@ def ldm_conditional_sample_one_mask(
             )
 
         noise_scheduler.set_timesteps(num_inference_steps=num_inference_steps)
-        # mask generator is DDPM
         inferer_ddpm = DiffusionInferer(noise_scheduler)
         latents = inferer_ddpm.sample(
             input_noise=latents,
@@ -117,10 +110,10 @@ def ldm_conditional_sample_one_mask(
         synthetic_mask = dynamic_infer(inferer, recon_model, latents)
         synthetic_mask = torch.softmax(synthetic_mask, dim=1)
         synthetic_mask = torch.argmax(synthetic_mask, dim=1, keepdim=True)
-        # mapping raw index to 132 labels
+        # Map raw indices to MAISI labels.
         synthetic_mask = remap_labels(synthetic_mask, label_dict_remap_json)
 
-        ###### post process #####
+        # Post-process the generated mask.
         data = synthetic_mask.squeeze().cpu().detach().numpy()
 
         labels = [23, 24, 26, 27, 128]
@@ -147,17 +140,13 @@ def filter_mask_with_organs(combine_label, anatomy_list):
     Returns:
         torch.Tensor: The filtered mask.
     """
-    # final output mask file has shape of output_size, contains labels in anatomy_list
-    # it is already interpolated to target size
     combine_label = combine_label.long()
-    # filter out the organs that are not in anatomy_list
+    # Keep requested organs and clear the rest.
     for i in range(len(anatomy_list)):
         organ = anatomy_list[i]
-        # replace it with a negative value so it will get mixed
+        # Use negative values as temporary markers to avoid collisions.
         combine_label[combine_label == organ] = -(i + 1)
-    # zero-out voxels with value not in anatomy_list
     combine_label[combine_label > 0] = 0
-    # output positive values
     combine_label = -combine_label
     return combine_label
 

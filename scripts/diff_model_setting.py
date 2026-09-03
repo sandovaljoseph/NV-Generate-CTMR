@@ -98,7 +98,6 @@ def initialize_distributed(num_gpus: int) -> tuple:
 def run_torchrun(module, module_args, num_gpus=1):
     num_nodes = 1
 
-    # temp JSON path for outputs
     with tempfile.TemporaryDirectory() as tmpd:
         out_index = os.path.join(tmpd, "outputs.json")
         full_args = module_args + ["--out_index", out_index]
@@ -119,7 +118,6 @@ def run_torchrun(module, module_args, num_gpus=1):
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
 
         try:
-            # stream stdout
             for line in iter(proc.stdout.readline, ""):
                 if not line and proc.poll() is not None:
                     break
@@ -132,7 +130,6 @@ def run_torchrun(module, module_args, num_gpus=1):
             if stderr:
                 print(stderr, end="")
 
-        # collect result
         if os.path.exists(out_index):
             with open(out_index) as f:
                 return json.load(f)  # list of per-rank paths

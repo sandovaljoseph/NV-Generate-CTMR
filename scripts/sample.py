@@ -46,8 +46,7 @@ from .infer_image_from_mask import (  # noqa: F401  (re-exported)
 )
 from .quality_check import is_outlier
 
-# Backward-compat re-exports — existing callers ``from scripts.sample import X``
-# keep working. ``X`` now physically lives in sample_mask / infer_image_from_mask.
+# Keep the old import path for existing callers.
 from .sample_mask import (  # noqa: F401  (re-exported)
     ReconModel,
     check_input_ct,
@@ -117,7 +116,6 @@ class LDMSampler:
             label_dict = json.load(f)
         self.all_anatomy_size_conditions_json = all_anatomy_size_conditions_json
 
-        # initialize variables
         self.body_region = body_region
         self.anatomy_list = [label_dict[organ] for organ in anatomy_list]
         self.all_mask_files_json = all_mask_files_json
@@ -142,11 +140,10 @@ class LDMSampler:
         self.controllable_anatomy_size = controllable_anatomy_size
         if len(self.controllable_anatomy_size):
             logging.info("controllable_anatomy_size is given, mask generation is triggered!")
-            # overwrite the anatomy_list by given organs in self.controllable_anatomy_size
+            # Replace anatomy_list with the organs named in controllable_anatomy_size.
             self.anatomy_list = [label_dict[organ_and_size[0]] for organ_and_size in self.controllable_anatomy_size]
         self.image_output_ext = image_output_ext
         self.label_output_ext = label_output_ext
-        # Set the default value for number of inference steps to 1000
         self.num_inference_steps = num_inference_steps if num_inference_steps is not None else 1000
         self.mask_generation_num_inference_steps = mask_generation_num_inference_steps if mask_generation_num_inference_steps is not None else 1000
 
@@ -159,7 +156,6 @@ class LDMSampler:
         self.autoencoder_sliding_window_infer_size = autoencoder_sliding_window_infer_size
         self.autoencoder_sliding_window_infer_overlap = autoencoder_sliding_window_infer_overlap
 
-        # quality check args
         self.max_try_time = 2  # if not pass quality check, will try self.max_try_time times
         with open(real_img_median_statistics) as json_file:
             self.median_statistics = json.load(json_file)
@@ -178,7 +174,6 @@ class LDMSampler:
             "bone": list(range(33, 57)) + list(range(63, 98)) + [120, 122, 127],
         }
 
-        # networks
         self.autoencoder.eval()
         self.diffusion_unet.eval()
         self.controlnet.eval()
